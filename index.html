@@ -34,7 +34,6 @@
     "react": "https://esm.sh/react@^19.1.1",
     "react/": "https://esm.sh/react@^19.1.1/",
     "react-dom/client": "https://esm.sh/react-dom@^19.1.1/client",
-    "react-dom/": "https://esm.sh/react-dom@^19.1.1/",
     "recharts": "https://esm.sh/recharts@^3.1.2"
   }
 }
@@ -42,6 +41,756 @@
 </head>
   <body class="bg-slate-950 text-slate-200">
     <div id="root"></div>
-    <script type="module" src="./index.tsx"></script>
+    <script type="module">
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom/client';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+
+// --- Constants ---
+const PIE_CHART_COLORS = ['#0ea5e9', '#10b981', '#f97316', '#8b5cf6', '#ec4899', '#facc15', '#64748b', '#ef4444', '#38bdf8', '#34d399'];
+
+// --- Icons ---
+const h = React.createElement;
+
+const UploadIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 16.5V9.75m0 0l-3.75 3.75M12 9.75l3.75 3.75M3 17.25V21h18v-3.75m-18 0V12a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 12v5.25" }));
+const ArrowLeftIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" }));
+const DownloadIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" }));
+const ChevronRightIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M8.25 4.5l7.5 7.5-7.5 7.5" }));
+const PlusIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M12 4.5v15m7.5-7.5h-15" }));
+const PencilIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" }));
+const TrashIcon = ({ className }) => h('svg', { xmlns: "http://www.w3.org/2000/svg", fill: "none", viewBox: "0 0 24 24", strokeWidth: 1.5, stroke: "currentColor", className }, h('path', { strokeLinecap: "round", strokeLinejoin: "round", d: "M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" }));
+
+// --- Components ---
+
+const AddAssetModal = ({ isOpen, onClose, onSave, assetToEdit }) => {
+  const [name, setName] = useState('');
+  const [type, setType] = useState('');
+  const [value, setValue] = useState('');
+  const [gainLoss, setGainLoss] = useState('');
+  const [error, setError] = useState('');
+
+  const isEditMode = !!assetToEdit;
+
+  useEffect(() => {
+    if (isOpen) {
+      if (isEditMode) {
+        setName(assetToEdit.name);
+        setType(assetToEdit.type);
+        setValue(String(assetToEdit.value));
+        setGainLoss(String(assetToEdit.gainLoss));
+      } else {
+        setName('');
+        setType('');
+        setValue('');
+        setGainLoss('0');
+      }
+      setError('');
+    }
+  }, [isOpen, assetToEdit, isEditMode]);
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const handleSave = () => {
+    if (!name || !type || !value) {
+      setError('銘柄名、種別、評価額は必須です。');
+      return;
+    }
+    const parsedValue = parseInt(value.replace(/,/g, ''), 10);
+    const parsedGainLoss = parseInt((gainLoss || '0').replace(/,/g, ''), 10);
+
+    if (isNaN(parsedValue) || isNaN(parsedGainLoss)) {
+      setError('評価額と評価損益は有効な数値を入力してください。');
+      return;
+    }
+    
+    if (isEditMode) {
+        onSave({
+            ...assetToEdit,
+            name,
+            type,
+            value: parsedValue,
+            gainLoss: parsedGainLoss,
+        });
+    } else {
+        onSave({
+            name,
+            type,
+            value: parsedValue,
+            gainLoss: parsedGainLoss,
+        });
+    }
+  };
+
+  return h('div', { className: "fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50", onClick: onClose },
+    h('div', { className: "bg-slate-800 rounded-lg shadow-xl w-full max-w-md p-6", onClick: e => e.stopPropagation() },
+      h('h2', { className: "text-xl font-bold text-white mb-4" }, isEditMode ? '資産を編集' : '資産を手入力で追加'),
+      h('div', { className: "space-y-4" },
+        h('div', null,
+          h('label', { htmlFor: "asset-name", className: "block text-sm font-medium text-slate-400 mb-1" }, "銘柄名"),
+          h('input', { type: "text", id: "asset-name", value: name, onChange: e => setName(e.target.value), placeholder: "例：現金, ビットコイン", className: "w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-white focus:ring-sky-500 focus:border-sky-500" })
+        ),
+        h('div', null,
+          h('label', { htmlFor: "asset-type", className: "block text-sm font-medium text-slate-400 mb-1" }, "種別"),
+          h('input', { type: "text", id: "asset-type", value: type, onChange: e => setType(e.target.value), placeholder: "例：現金, 仮想通貨", className: "w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-white focus:ring-sky-500 focus:border-sky-500" })
+        ),
+        h('div', null,
+          h('label', { htmlFor: "asset-value", className: "block text-sm font-medium text-slate-400 mb-1" }, "評価額 (円)"),
+          h('input', { type: "text", id: "asset-value", value: value, onChange: e => setValue(e.target.value), placeholder: "1000000", className: "w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-white focus:ring-sky-500 focus:border-sky-500" })
+        ),
+        h('div', null,
+          h('label', { htmlFor: "asset-gainloss", className: "block text-sm font-medium text-slate-400 mb-1" }, "評価損益 (円)"),
+          h('input', { type: "text", id: "asset-gainloss", value: gainLoss, onChange: e => setGainLoss(e.target.value), placeholder: "0", className: "w-full bg-slate-900 border border-slate-700 rounded-md px-3 py-2 text-white focus:ring-sky-500 focus:border-sky-500" })
+        )
+      ),
+      error && h('p', { className: "mt-4 text-sm text-red-400" }, error),
+      h('div', { className: "mt-6 flex justify-end space-x-3" },
+        h('button', { onClick: onClose, className: "px-4 py-2 text-sm font-medium text-slate-300 bg-slate-700 rounded-md hover:bg-slate-600 transition-colors" }, "キャンセル"),
+        h('button', { onClick: handleSave, className: "px-4 py-2 text-sm font-medium text-white bg-sky-500 rounded-md hover:bg-sky-600 transition-colors" }, "保存")
+      )
+    )
+  );
+};
+
+const HoldingsTable = ({ aggregatedHoldings, onEdit, onDelete, isReadOnly }) => {
+  const [expandedRows, setExpandedRows] = useState(new Set());
+
+  const toggleRow = (name) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(name)) {
+        newSet.delete(name);
+      } else {
+        newSet.add(name);
+      }
+      return newSet;
+    });
+  };
+
+  const calculateGainLossRate = (value, gainLoss) => {
+    const principal = value - gainLoss;
+    if (principal === 0 || principal === -0) {
+      return gainLoss > 0 ? 100.0 : 0;
+    }
+    return (gainLoss / principal) * 100;
+  };
+
+  const currencyFormat = (value) => new Intl.NumberFormat('ja-JP').format(value) + '円';
+  const signedCurrencyFormat = (value) => new Intl.NumberFormat('ja-JP', { signDisplay: 'always' }).format(value) + '円';
+
+  return h('div', { className: "overflow-x-auto overflow-y-auto max-h-[600px] pr-2" },
+    h('table', { className: "w-full text-left text-base min-w-[700px]" },
+      h('thead', { className: "sticky top-0 bg-slate-850 z-10" },
+        h('tr', null,
+          h('th', { className: "p-2 font-semibold text-slate-400 whitespace-nowrap" }, "銘柄名"),
+          h('th', { className: "p-2 font-semibold text-slate-400 whitespace-nowrap" }, "種別"),
+          h('th', { className: "p-2 font-semibold text-slate-400 text-right whitespace-nowrap" }, "評価額"),
+          h('th', { className: "p-2 font-semibold text-slate-400 text-right whitespace-nowrap" }, "評価損益"),
+          h('th', { className: "p-2 font-semibold text-slate-400 text-right whitespace-nowrap" }, "評価損益率(%)"),
+          h('th', { className: "p-2 font-semibold text-slate-400 text-right whitespace-nowrap" }, "")
+        )
+      ),
+      h('tbody', null,
+        aggregatedHoldings.map((aggHolding) => {
+          const isExpanded = expandedRows.has(aggHolding.name);
+          const gainLossRate = calculateGainLossRate(aggHolding.totalValue, aggHolding.totalGainLoss);
+          const hasSubHoldings = aggHolding.subHoldings.length > 1;
+          const isSingleManualEntry = aggHolding.subHoldings.length === 1 && aggHolding.subHoldings[0].account === '手入力';
+          const canEditSingle = !isReadOnly && isSingleManualEntry;
+
+          return h(React.Fragment, { key: aggHolding.name },
+            h('tr', {
+                className: `border-t border-slate-700/50 hover:bg-slate-800 ${hasSubHoldings ? 'cursor-pointer' : ''}`,
+                onClick: () => hasSubHoldings && toggleRow(aggHolding.name)
+              },
+              h('td', { className: "p-3 text-slate-200 font-medium whitespace-nowrap" },
+                h('div', { className: "flex items-center" },
+                  hasSubHoldings ? h(ChevronRightIcon, { className: `w-4 h-4 mr-2 text-slate-500 transition-transform ${isExpanded ? 'rotate-90' : ''}` }) : h('div', { className: "w-4 mr-2" }),
+                  aggHolding.name
+                )
+              ),
+              h('td', { className: "p-3 text-slate-400 whitespace-nowrap" }, aggHolding.type),
+              h('td', { className: "p-3 text-slate-200 text-right font-medium whitespace-nowrap" }, currencyFormat(aggHolding.totalValue)),
+              h('td', { className: `p-3 text-right font-medium whitespace-nowrap ${aggHolding.totalGainLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}` }, signedCurrencyFormat(aggHolding.totalGainLoss)),
+              h('td', { className: `p-3 text-right font-medium whitespace-nowrap ${gainLossRate >= 0 ? 'text-emerald-400' : 'text-red-400'}` }, `${gainLossRate.toFixed(2)}%`),
+              h('td', { className: "p-3 text-right whitespace-nowrap" },
+                canEditSingle && h('div', { className: "flex items-center justify-end space-x-2" },
+                  h('button', { onClick: (e) => { e.stopPropagation(); onEdit(aggHolding.subHoldings[0]); }, className: "text-slate-400 hover:text-sky-400" }, h(PencilIcon, { className: "w-4 h-4" })),
+                  h('button', { onClick: (e) => { e.stopPropagation(); onDelete(aggHolding.subHoldings[0].id); }, className: "text-slate-400 hover:text-red-400" }, h(TrashIcon, { className: "w-4 h-4" }))
+                )
+              )
+            ),
+            isExpanded && hasSubHoldings && aggHolding.subHoldings.map((subHolding) => {
+              const subGainLossRate = calculateGainLossRate(subHolding.value, subHolding.gainLoss);
+              const canEditSub = !isReadOnly && subHolding.account === '手入力';
+              return h('tr', { key: subHolding.id, className: "bg-slate-850/50" },
+                h('td', { className: "p-3 pl-12 text-slate-300 whitespace-nowrap" }, subHolding.account),
+                h('td', { className: "p-3 text-slate-400 whitespace-nowrap" }),
+                h('td', { className: "p-3 text-slate-300 text-right whitespace-nowrap" }, currencyFormat(subHolding.value)),
+                h('td', { className: `p-3 text-right whitespace-nowrap ${subHolding.gainLoss >= 0 ? 'text-emerald-400' : 'text-red-400'}` }, signedCurrencyFormat(subHolding.gainLoss)),
+                h('td', { className: `p-3 text-right whitespace-nowrap ${subGainLossRate >= 0 ? 'text-emerald-400' : 'text-red-400'}` }, `${subGainLossRate.toFixed(2)}%`),
+                h('td', { className: "p-3 text-right whitespace-nowrap" },
+                  canEditSub && h('div', { className: "flex items-center justify-end space-x-2" },
+                    h('button', { onClick: () => onEdit(subHolding), className: "text-slate-400 hover:text-sky-400" }, h(PencilIcon, { className: "w-4 h-4" })),
+                    h('button', { onClick: () => onDelete(subHolding.id), className: "text-slate-400 hover:text-red-400" }, h(TrashIcon, { className: "w-4 h-4" }))
+                  )
+                )
+              );
+            })
+          );
+        })
+      )
+    )
+  );
+};
+
+const CustomTooltip = ({ active, payload }) => {
+  if (active && payload && payload.length) {
+    const data = payload[0];
+    const formattedValue = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(data.value);
+    return h('div', { className: "bg-slate-950/80 p-3 rounded-md border border-slate-700 backdrop-blur-sm" },
+      h('p', { className: "text-slate-200" }, `${data.name}`),
+      h('p', { className: "text-white font-semibold" }, `${formattedValue}`),
+      h('p', { className: "text-xs text-slate-400" }, `(${(data.value / payload[0].payload.total * 100).toFixed(2)}%)`)
+    );
+  }
+  return null;
+};
+
+const RADIAN = Math.PI / 180;
+const renderCustomizedLabel = ({ cx, cy, midAngle, outerRadius, percent, name }) => {
+  const radius = outerRadius + 20;
+  const x = cx + radius * Math.cos(-midAngle * RADIAN);
+  const y = cy + radius * Math.sin(-midAngle * RADIAN);
+  const textAnchor = x > cx ? 'start' : 'end';
+
+  return h('text', { x, y, fill: "#94a3b8", textAnchor, dominantBaseline: "central", fontSize: 12, style: { whiteSpace: 'nowrap' } },
+    `${name} ${(percent * 100).toFixed(1)}%`
+  );
+};
+
+const PortfolioPieChart = ({ byAccount, byAssetClass, byHolding, activeView, onViewChange }) => {
+  const data = activeView === 'assetClass' ? byAssetClass : activeView === 'account' ? byAccount : byHolding;
+  const total = data.reduce((sum, entry) => sum + entry.value, 0);
+  const chartData = data.map(item => ({ ...item, total }));
+
+  const getButtonClass = (view) => `px-3 py-1 rounded transition-colors ${activeView === view ? 'bg-sky-500 text-white' : 'text-slate-400 hover:bg-slate-800'}`;
+
+  return h('div', { className: "bg-slate-850 p-6 rounded-lg h-full flex flex-col" },
+    h('div', { className: "flex items-center justify-between mb-4 flex-wrap gap-2" },
+      h('h2', { className: "text-xl font-bold text-white" }, "アセットアロケーション"),
+      h('div', { className: "flex text-sm bg-slate-900 p-1 rounded-md" },
+        h('button', { onClick: () => onViewChange('assetClass'), className: getButtonClass('assetClass') }, "資産クラス別"),
+        h('button', { onClick: () => onViewChange('account'), className: getButtonClass('account') }, "口座別"),
+        h('button', { onClick: () => onViewChange('holdings'), className: getButtonClass('holdings') }, "保有銘柄別")
+      )
+    ),
+    h('div', { className: "relative flex-grow w-full h-96" },
+      h(ResponsiveContainer, { width: "100%", height: "100%" },
+        h(PieChart, { margin: { top: 40, right: 50, bottom: 40, left: 50 } },
+          h(Tooltip, { content: h(CustomTooltip), wrapperStyle: { position: 'absolute', top: -20, left: '50%', transform: 'translateX(-50%)', zIndex: 100, pointerEvents: 'none' } }),
+          h(Pie, { data: chartData, cx: "50%", cy: "50%", innerRadius: 80, outerRadius: 120, fill: "#8884d8", paddingAngle: 2, dataKey: "value", nameKey: "name", labelLine: { stroke: '#64748b' }, label: renderCustomizedLabel },
+            chartData.map((_entry, index) => h(Cell, { key: `cell-${index}`, fill: PIE_CHART_COLORS[index % PIE_CHART_COLORS.length] }))
+          )
+        )
+      ),
+      h('div', { className: "absolute inset-0 flex flex-col items-center justify-center pointer-events-none" },
+        h('p', { className: "text-sm text-slate-400" }, "合計"),
+        h('p', { className: "text-2xl font-bold text-white tracking-tight" }, `${new Intl.NumberFormat('ja-JP').format(total)}円`)
+      )
+    )
+  );
+};
+
+const SummaryCard = ({ totalValue, totalGainLoss }) => {
+  const formattedValue = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(totalValue);
+  const formattedGainLoss = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY', signDisplay: 'always' }).format(totalGainLoss);
+  const gainLossColor = totalGainLoss >= 0 ? 'text-emerald-400' : 'text-red-400';
+
+  return h('div', { className: "bg-slate-850 p-6 rounded-lg text-center" },
+    h('p', { className: "text-sm font-medium text-slate-400" }, "総資産額"),
+    h('p', { className: "text-5xl md:text-6xl font-bold text-sky-400 mt-2 tracking-tight" }, formattedValue),
+    h('div', { className: `mt-2 text-xl font-semibold ${gainLossColor}` },
+      h('span', null, formattedGainLoss)
+    )
+  );
+};
+
+const Header = ({ onReset, onExport, onAddAsset, isAddDisabled }) => {
+  return h('header', { className: "flex items-center justify-between" },
+    h('h1', { className: "text-2xl font-bold text-white" }, "Asset Palette"),
+    h('div', { className: "flex items-center space-x-2" },
+      h('button', { onClick: onReset, className: "flex items-center space-x-2 px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors" },
+        h(ArrowLeftIcon, { className: "w-4 h-4" }),
+        h('span', null, "戻る")
+      ),
+      h('button', { onClick: onAddAsset, disabled: isAddDisabled, className: "flex items-center space-x-2 px-3 py-2 text-sm font-medium text-slate-300 bg-slate-800 rounded-md hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" },
+        h(PlusIcon, { className: "w-4 h-4" }),
+        h('span', null, "資産を追加")
+      ),
+      h('button', { onClick: onExport, className: "flex items-center space-x-2 px-3 py-2 text-sm font-medium text-white bg-sky-500 rounded-md hover:bg-sky-600 transition-colors" },
+        h(DownloadIcon, { className: "w-4 h-4" }),
+        h('span', null, "PNGで保存")
+      )
+    )
+  );
+};
+
+const SummaryTable = ({ data, totalValue, headers }) => {
+    const currencyFormat = (value) => new Intl.NumberFormat('ja-JP').format(value) + '円';
+
+    return h('div', { className: "overflow-x-auto overflow-y-auto max-h-[600px] pr-2" },
+        h('table', { className: "w-full text-left text-base min-w-[400px]" },
+            h('thead', { className: "sticky top-0 bg-slate-850 z-10" },
+                h('tr', null,
+                    h('th', { className: "p-2 font-semibold text-slate-400 whitespace-nowrap" }, headers[0]),
+                    h('th', { className: "p-2 font-semibold text-slate-400 text-right whitespace-nowrap" }, headers[1]),
+                    h('th', { className: "p-2 font-semibold text-slate-400 text-right whitespace-nowrap" }, headers[2])
+                )
+            ),
+            h('tbody', null,
+                data.map((item) => (
+                    h('tr', { key: item.name, className: "border-t border-slate-700/50" },
+                        h('td', { className: "p-3 text-slate-200 font-medium whitespace-nowrap" }, item.name),
+                        h('td', { className: "p-3 text-slate-200 text-right font-medium whitespace-nowrap" }, currencyFormat(item.value)),
+                        h('td', { className: "p-3 text-slate-300 text-right whitespace-nowrap" },
+                            `${totalValue > 0 ? ((item.value / totalValue) * 100).toFixed(2) : '0.00'}%`
+                        )
+                    )
+                ))
+            )
+        )
+    );
+};
+
+const Dashboard = ({ individualPortfolios, combinedPortfolio, onReset, onManualAdd, onUpdateAsset, onDeleteAsset }) => {
+  const dashboardRef = useRef(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingAsset, setEditingAsset] = useState(null);
+  const [activeView, setActiveView] = useState('combined');
+  const [activeViewMode, setActiveViewMode] = useState('assetClass');
+
+  const handleExport = useCallback(() => {
+    if (!dashboardRef.current || !window.htmlToImage) return;
+
+    window.htmlToImage.toPng(dashboardRef.current, { 
+      backgroundColor: '#0f172a',
+      pixelRatio: 2,
+      style: {
+        fontFamily: 'Inter, Noto Sans JP, sans-serif'
+      }
+    })
+      .then((dataUrl) => {
+        const link = document.createElement('a');
+        link.download = 'asset-palette.png';
+        link.href = dataUrl;
+        link.click();
+      })
+      .catch((err) => {
+        console.error('oops, something went wrong!', err);
+        alert('画像の書き出しに失敗しました。');
+      });
+  }, []);
+
+  const isCombinedView = activeView === 'combined';
+  const currentData = isCombinedView ? combinedPortfolio : individualPortfolios[activeView].data;
+  const currentPortfolioIndex = isCombinedView ? -1 : activeView;
+
+  const handleOpenAddModal = () => {
+    if (isCombinedView) return;
+    setEditingAsset(null);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEditModal = (asset) => {
+    if (isCombinedView) return;
+    setEditingAsset(asset);
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = (assetId) => {
+    if (isCombinedView) return;
+    if (window.confirm('この資産を削除してもよろしいですか？')) {
+      onDeleteAsset(currentPortfolioIndex, assetId);
+    }
+  };
+
+  const handleSaveAsset = (assetData) => {
+    if (isCombinedView) return;
+    if ('id' in assetData) {
+      onUpdateAsset(currentPortfolioIndex, assetData);
+    } else {
+      onManualAdd(currentPortfolioIndex, assetData);
+    }
+    setIsModalOpen(false);
+  }
+
+  const getTabClass = (isActive) => 
+    `px-4 py-2 text-sm font-medium rounded-t-md transition-colors focus:outline-none ${
+      isActive
+        ? 'bg-slate-900 text-white border-slate-700 border-b-0'
+        : 'text-slate-400 border-transparent hover:bg-slate-800/50'
+    }`;
+  
+  const getTableTabClass = (isActive) => 
+    `px-3 py-1 rounded transition-colors ${
+      isActive
+        ? 'bg-sky-500 text-white'
+        : 'text-slate-400 hover:bg-slate-800'
+    }`;
+
+  const viewModes = {
+    assetClass: { title: '資産クラス別一覧', component: SummaryTable, props: { data: currentData.byAssetClass, totalValue: currentData.totalValue, headers: ['資産クラス', '評価額', '構成比'] } },
+    account: { title: '口座別一覧', component: SummaryTable, props: { data: currentData.byAccount, totalValue: currentData.totalValue, headers: ['口座', '評価額', '構成比'] } },
+    holdings: { title: '保有銘柄一覧', component: HoldingsTable, props: { aggregatedHoldings: currentData.aggregatedHoldings, onEdit: handleOpenEditModal, onDelete: handleDelete, isReadOnly: isCombinedView } }
+  };
+  const currentView = viewModes[activeViewMode];
+  
+  return h(React.Fragment, null,
+    h('div', { className: "p-4 md:p-6 lg:p-8 bg-slate-950 min-h-screen" },
+      h('div', null,
+        h(Header, { onReset, onExport, onAddAsset: handleOpenAddModal, isAddDisabled: isCombinedView }),
+        h('div', { className: "mt-6 border-b border-slate-700 flex space-x-2" },
+          h('button', { className: getTabClass(isCombinedView), onClick: () => setActiveView('combined') }, "合算ポートフォリオ"),
+          individualPortfolios.map((p, index) => 
+            h('button', { key: p.name, className: getTabClass(activeView === index), onClick: () => setActiveView(index) }, p.name)
+          )
+        ),
+        h('div', { ref: dashboardRef, className: "p-4 sm:p-6 md:p-8 bg-slate-900 rounded-b-xl rounded-tr-xl" },
+          h(SummaryCard, { totalValue: currentData.totalValue, totalGainLoss: currentData.totalGainLoss }),
+          h('div', { className: "flex flex-col gap-8 mt-8" },
+            h('div', null,
+              h(PortfolioPieChart, { byAccount: currentData.byAccount, byAssetClass: currentData.byAssetClass, byHolding: currentData.byHolding, activeView: activeViewMode, onViewChange: setActiveViewMode })
+            ),
+            h('div', { className: "bg-slate-850 p-6 rounded-lg" },
+              h('div', { className: "flex items-center justify-between mb-4 flex-wrap gap-2" },
+                  h('h2', { className: "text-xl font-bold text-white" }, currentView.title),
+                  h('div', { className: "flex text-sm bg-slate-900 p-1 rounded-md" },
+                      h('button', { onClick: () => setActiveViewMode('assetClass'), className: getTableTabClass(activeViewMode === 'assetClass') }, "資産クラス別"),
+                      h('button', { onClick: () => setActiveViewMode('account'), className: getTableTabClass(activeViewMode === 'account') }, "口座別"),
+                      h('button', { onClick: () => setActiveViewMode('holdings'), className: getTableTabClass(activeViewMode === 'holdings') }, "保有銘柄別")
+                  )
+              ),
+              h(currentView.component, currentView.props)
+            )
+          )
+        )
+      ),
+      h('footer', { className: "text-center py-8 text-slate-600 text-sm" },
+        h('p', null, "Generated by Asset Palette")
+      )
+    ),
+    h(AddAssetModal, { isOpen: isModalOpen, onClose: () => setIsModalOpen(false), onSave: handleSaveAsset, assetToEdit: editingAsset })
+  );
+};
+
+// --- File Upload Logic ---
+
+const parseCsvLine = (line) => {
+    const result = [];
+    let field = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (inQuotes) {
+            if (char === '"') {
+                if (i + 1 < line.length && line[i + 1] === '"') {
+                    field += '"'; i++;
+                } else {
+                    inQuotes = false;
+                }
+            } else { field += char; }
+        } else {
+            if (char === '"') { inQuotes = true; }
+            else if (char === ',') { result.push(field); field = ''; }
+            else { field += char; }
+        }
+    }
+    result.push(field);
+    return result;
+};
+
+const findHeaderIndex = (headers, possibleNames) => {
+    for (const name of possibleNames) {
+        const index = headers.indexOf(name);
+        if (index !== -1) return index;
+    }
+    return -1;
+};
+
+const calculatePortfolioData = (holdings) => {
+  const totalValue = holdings.reduce((sum, h) => sum + h.value, 0);
+  const totalGainLoss = holdings.reduce((sum, h) => sum + h.gainLoss, 0);
+
+  const holdingGroups = new Map();
+  for (const holding of holdings) {
+      if (!holdingGroups.has(holding.name)) {
+          holdingGroups.set(holding.name, { totalValue: 0, totalGainLoss: 0, type: holding.type, subHoldings: [] });
+      }
+      const group = holdingGroups.get(holding.name);
+      group.totalValue += holding.value;
+      group.totalGainLoss += holding.gainLoss;
+      group.subHoldings.push(holding);
+  }
+  
+  const assetTypeOrder = { '国内株式': 1, '米国株式': 2, '中国株式': 3, 'アセアン株式': 4, '投資信託': 5, '金・プラチナ': 6, '国内債券': 7, '外国債券': 8, '現金': 98, '仮想通貨': 99 };
+
+  const aggregatedHoldings = Array.from(holdingGroups.entries()).map(([name, group]) => ({ name, ...group })).sort((a, b) => {
+    const typeOrderA = assetTypeOrder[a.type] || 90;
+    const typeOrderB = assetTypeOrder[b.type] || 90;
+    if (typeOrderA !== typeOrderB) return typeOrderA - typeOrderB;
+    return b.totalValue - a.totalValue;
+  });
+
+  const byHoldingRaw = aggregatedHoldings.map(h => ({ name: h.name, value: h.totalValue }));
+  let byHolding;
+  const MAX_PIE_SLICES = 10;
+  if (byHoldingRaw.length > MAX_PIE_SLICES) {
+    const topHoldings = byHoldingRaw.slice(0, MAX_PIE_SLICES - 1);
+    const otherValue = byHoldingRaw.slice(MAX_PIE_SLICES - 1).reduce((acc, h) => acc + h.value, 0);
+    byHolding = [...topHoldings, { name: 'その他', value: otherValue }];
+  } else {
+    byHolding = byHoldingRaw;
+  }
+  
+  const byAssetClassMap = new Map();
+  holdings.forEach(h => { byAssetClassMap.set(h.type, (byAssetClassMap.get(h.type) || 0) + h.value); });
+  const byAssetClass = Array.from(byAssetClassMap, ([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+
+  const byAccountMap = new Map();
+  holdings.forEach(h => {
+    const key = h.account === '手入力' ? h.type : h.account;
+    byAccountMap.set(key, (byAccountMap.get(key) || 0) + h.value);
+  });
+  const byAccount = Array.from(byAccountMap, ([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value);
+
+  return { totalValue, totalGainLoss, aggregatedHoldings, byAccount, byAssetClass, byHolding, holdings };
+}
+
+const parseSingleFile = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const buffer = event.target?.result;
+        if (!buffer) throw new Error("ファイルの読み込みに失敗しました。");
+        
+        let text = null;
+        for (const encoding of ['utf-8', 'shift_jis', 'euc-jp']) {
+            try {
+                const decoder = new TextDecoder(encoding);
+                const decodedText = decoder.decode(buffer);
+                if (decodedText.includes('保有商品詳細')) {
+                    text = decodedText;
+                    break;
+                }
+            } catch (e) { /* ignore */ }
+        }
+        
+        if (!text) throw new Error('「保有商品詳細」セクションが見つかりません。楽天証券からダウンロードした資産残高（CSV）ファイルであることを確認してください。');
+        if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+
+        const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
+        const startIndex = lines.findIndex(line => line.includes('保有商品詳細'));
+        if (startIndex === -1) throw new Error('CSV解析中に「保有商品詳細」セクションが見失われました。');
+
+        const headerLine = lines[startIndex + 1];
+        if (!headerLine) throw new Error("ヘッダー行が見つかりません。");
+        const headers = parseCsvLine(headerLine).map(h => h.trim());
+        
+        const typeIndex = findHeaderIndex(headers, ['種別']);
+        const nameIndex = findHeaderIndex(headers, ['銘柄名', '銘柄']);
+        const accountIndex = findHeaderIndex(headers, ['口座']);
+        const valueIndex = findHeaderIndex(headers, ['評価額', '時価評価額[円]']);
+        const gainLossIndex = findHeaderIndex(headers, ['評価損益[円]']);
+
+        const missing = [{ n:['種別'], i: typeIndex }, { n:['銘柄名', '銘柄'], i: nameIndex }, { n:['口座'], i: accountIndex }, { n:['評価額', '時価評価額[円]'], i: valueIndex }, { n:['評価損益[円]'], i: gainLossIndex }].filter(h => h.i === -1).map(h => h.n.join('/'));
+        if (missing.length > 0) throw new Error(`必須の列が見つかりません: ${missing.join(', ')}。`);
+
+        const holdings = [];
+        for (let i = startIndex + 2; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('■')) break;
+            const columns = parseCsvLine(line).map(c => c.trim());
+            if (columns.length < Math.max(typeIndex, nameIndex, accountIndex, valueIndex, gainLossIndex) + 1) continue;
+
+            const value = parseInt((columns[valueIndex] || '0').replace(/,/g, ''), 10);
+            const gainLoss = parseInt((columns[gainLossIndex] || '0').replace(/,/g, ''), 10);
+
+            if (!isNaN(value) && !isNaN(gainLoss) && columns[typeIndex] && columns[nameIndex] && columns[accountIndex]) {
+                holdings.push({
+                    id: `csv_${file.name}_${i}`, type: columns[typeIndex], name: columns[nameIndex], account: columns[accountIndex], value, gainLoss,
+                });
+            }
+        }
+        resolve(holdings);
+      } catch (e) { reject(e); }
+    };
+    reader.onerror = () => reject(new Error('ファイルの読み込みに失敗しました。'));
+    reader.readAsArrayBuffer(file);
+  });
+};
+
+const FileUpload = ({ onDataLoaded }) => {
+  const [files, setFiles] = useState([]);
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef(null);
+  const nextId = useRef(0);
+
+  const addFiles = useCallback((newFiles) => {
+    setError(null);
+    const csvFiles = Array.from(newFiles).filter(f => f.name.toLowerCase().endsWith('.csv'));
+    if (csvFiles.length === 0) { setError('有効なCSVファイルがありません。'); return; }
+    const newFileEntries = csvFiles.map((file, index) => ({ id: nextId.current++, file, name: `ポートフォリオ ${files.length + index + 1}` }));
+    setFiles(prev => [...prev, ...newFileEntries]);
+  }, [files.length]);
+
+  const handleFileChange = (e) => {
+    if (e.target.files) { addFiles(e.target.files); e.target.value = ''; }
+  };
+  const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); if (e.dataTransfer.files) { addFiles(e.dataTransfer.files); } };
+  const handleDragEvents = {
+      onDragEnter: (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); },
+      onDragLeave: (e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); },
+      onDragOver: (e) => { e.preventDefault(); e.stopPropagation(); }
+  };
+  const handleNameChange = (id, newName) => { setFiles(prev => prev.map(f => f.id === id ? { ...f, name: newName } : f)); };
+  const handleRemoveFile = (id) => { setFiles(prev => prev.filter(f => f.id !== id)); };
+
+  const processAllFiles = async () => {
+    if (files.length === 0) { setError('CSVファイルを追加してください。'); return; }
+    setIsLoading(true); setError(null);
+    const results = [];
+    for (const fileWithData of files) {
+      try {
+        const holdings = await parseSingleFile(fileWithData.file);
+        if (holdings.length === 0) throw new Error(`'${fileWithData.file.name}' から保有商品データを読み込めませんでした。`);
+        results.push({ name: fileWithData.name, data: calculatePortfolioData(holdings) });
+      } catch (e) {
+        setError(`エラー (${fileWithData.file.name}): ${e.message}`); setIsLoading(false); return;
+      }
+    }
+    onDataLoaded(results);
+  };
+
+  return h('div', { className: "flex flex-col items-center justify-center min-h-screen p-4 bg-slate-950" },
+    h('div', { className: "text-center max-w-2xl mx-auto" },
+      h('h1', { className: "text-4xl md:text-5xl font-bold text-white" }, "Asset Palette"),
+      h('p', { className: "mt-4 text-lg md:text-xl text-slate-400" }, "CSVを放り込むだけ。あなたの資産を、一枚の絵画に。")
+    ),
+    h('div', { className: "w-full max-w-2xl mt-12" },
+      h('div', { className: "bg-slate-900 rounded-lg p-6" },
+        h('div', { ...handleDragEvents, onDrop: handleDrop, className: `flex justify-center items-center w-full min-h-[10rem] px-4 transition border-2 border-dashed rounded-md cursor-pointer hover:border-sky-400 focus:outline-none ${isDragging ? 'border-sky-400' : 'border-slate-700'}`, onClick: () => fileInputRef.current?.click() },
+          h('input', { type: "file", accept: ".csv", onChange: handleFileChange, className: "hidden", ref: fileInputRef, multiple: true }),
+          h('span', { className: "flex flex-col items-center space-y-2" },
+            h(UploadIcon, { className: "w-10 h-10 text-slate-500" }),
+            h('span', { className: "font-medium text-slate-300" }, h('span', { className: "text-sky-400" }, "CSVファイル"), "をドラッグ＆ドロップ"),
+            h('span', { className: "text-slate-500" }, "またはクリックして選択 (複数可)")
+          )
+        ),
+        files.length > 0 && h('div', { className: "mt-6 space-y-3" },
+          files.map(f => h('div', { key: f.id, className: "flex items-center space-x-3 bg-slate-800 p-2 rounded-md" },
+            h('input', { type: "text", value: f.name, onChange: (e) => handleNameChange(f.id, e.target.value), className: "flex-grow bg-transparent text-white focus:outline-none focus:ring-0 border-none p-1", placeholder: "ポートフォリオ名 (例: 夫, 妻)" }),
+            h('span', { className: "text-sm text-slate-400 truncate flex-shrink-0", style: { maxWidth: '150px' } }, f.file.name),
+            h('button', { onClick: () => handleRemoveFile(f.id), className: "text-slate-500 hover:text-red-400" }, h(TrashIcon, { className: "w-5 h-5" }))
+          ))
+        )
+      ),
+      h('div', { className: "mt-6 flex flex-col items-center" },
+        h('button', { onClick: processAllFiles, disabled: isLoading || files.length === 0, className: "w-full max-w-xs px-6 py-3 text-base font-bold text-white bg-sky-500 rounded-md hover:bg-sky-600 transition-colors disabled:bg-slate-700 disabled:cursor-not-allowed flex items-center justify-center" },
+          isLoading ? h(React.Fragment, null, h('div', { className: "w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" }), h('span', null, "解析中...")) : 'ポートフォリオを作成'
+        ),
+        error && h('p', { className: "mt-4 text-red-400 bg-red-900/50 px-4 py-2 rounded-md w-full text-center" }, error)
+      )
+    )
+  );
+};
+
+// --- App Component ---
+
+const recalculatePortfolio = (allHoldings) => {
+  return calculatePortfolioData(allHoldings); // Use the same logic
+};
+
+const App = () => {
+  const [appState, setAppState] = useState(null);
+
+  const handleDataLoaded = useCallback((portfolios) => {
+    const allHoldings = portfolios.flatMap(p => p.data.holdings);
+    const combinedData = recalculatePortfolio(allHoldings);
+    setAppState({ individual: portfolios, combined: combinedData });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setAppState(null);
+  }, []);
+
+  const handleManualAdd = useCallback((portfolioIndex, newAssetData) => {
+    setAppState(prevState => {
+      if (!prevState) return null;
+      const newAsset = { ...newAssetData, id: `manual_${Date.now()}`, account: '手入力' };
+      const updatedIndividual = [...prevState.individual];
+      const targetPortfolio = updatedIndividual[portfolioIndex];
+      const updatedHoldings = [...targetPortfolio.data.holdings, newAsset];
+      updatedIndividual[portfolioIndex] = { ...targetPortfolio, data: recalculatePortfolio(updatedHoldings) };
+      const allHoldings = updatedIndividual.flatMap(p => p.data.holdings);
+      const combinedData = recalculatePortfolio(allHoldings);
+      return { individual: updatedIndividual, combined: combinedData };
+    });
+  }, []);
+
+  const handleUpdateAsset = useCallback((portfolioIndex, updatedAsset) => {
+    setAppState(prevState => {
+      if (!prevState) return null;
+      const updatedIndividual = [...prevState.individual];
+      const targetPortfolio = updatedIndividual[portfolioIndex];
+      const updatedHoldings = targetPortfolio.data.holdings.map(h => h.id === updatedAsset.id ? updatedAsset : h);
+      updatedIndividual[portfolioIndex] = { ...targetPortfolio, data: recalculatePortfolio(updatedHoldings) };
+      const allHoldings = updatedIndividual.flatMap(p => p.data.holdings);
+      const combinedData = recalculatePortfolio(allHoldings);
+      return { individual: updatedIndividual, combined: combinedData };
+    });
+  }, []);
+
+  const handleDeleteAsset = useCallback((portfolioIndex, assetId) => {
+    setAppState(prevState => {
+      if (!prevState) return null;
+      const updatedIndividual = [...prevState.individual];
+      const targetPortfolio = updatedIndividual[portfolioIndex];
+      const updatedHoldings = targetPortfolio.data.holdings.filter(h => h.id !== assetId);
+      updatedIndividual[portfolioIndex] = { ...targetPortfolio, data: recalculatePortfolio(updatedHoldings) };
+      const allHoldings = updatedIndividual.flatMap(p => p.data.holdings);
+      const combinedData = recalculatePortfolio(allHoldings);
+      return { individual: updatedIndividual, combined: combinedData };
+    });
+  }, []);
+
+  return h('div', { className: "min-h-screen bg-slate-950 font-sans" },
+    !appState ?
+      h(FileUpload, { onDataLoaded: handleDataLoaded }) :
+      h(Dashboard, {
+        individualPortfolios: appState.individual,
+        combinedPortfolio: appState.combined,
+        onReset: handleReset,
+        onManualAdd: handleManualAdd,
+        onUpdateAsset: handleUpdateAsset,
+        onDeleteAsset: handleDeleteAsset,
+      })
+  );
+};
+
+// --- Render App ---
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(h(React.StrictMode, null, h(App)));
+
+</script>
   </body>
 </html>
