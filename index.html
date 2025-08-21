@@ -248,10 +248,12 @@ const CustomTooltip = ({ active, payload }) => {
   if (active && payload && payload.length) {
     const data = payload[0];
     const formattedValue = new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(data.value);
+    const total = payload[0].payload.total;
+    const percentage = total > 0 ? (data.value / total * 100).toFixed(2) : '0.00';
     return h('div', { className: "bg-slate-950/80 p-3 rounded-md border border-slate-700 backdrop-blur-sm" },
       h('p', { className: "text-slate-200" }, `${data.name}`),
       h('p', { className: "text-white font-semibold" }, `${formattedValue}`),
-      h('p', { className: "text-xs text-slate-400" }, `(${(data.value / payload[0].payload.total * 100).toFixed(2)}%)`)
+      h('p', { className: "text-xs text-slate-400" }, `(${percentage}%)`)
     );
   }
   return null;
